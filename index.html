@@ -685,7 +685,7 @@ body:not(.online) .online-only{display:none!important}
     </section>
   </section>
 </main>
-<footer>Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
+<footer><span class="ver">versión 21/11 14:30</span> · Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
 
 <div class="tt" id="tt"><div class="tt-l" id="tt-l"></div><div class="tt-v" id="tt-v"></div></div>
 
@@ -1698,7 +1698,8 @@ function renderPenaflor() {
   initPick();
 }
 function renderProgramas() {
-  if (!D.prog || !D.prog.length || !D.av) return '';
+  if (!D.av) return '';
+  if (!D.prog || !D.prog.length) return '<section class="card visual"><h2>Seguimiento de combos</h2><div class="empty">No encontré en la solapa Avance un bloque con targets por mes (TG OCT / AVANCE OCT / … / TG TOTAL / DIF). Si los datos se publicaron desde una copia del dash sin esas columnas, cargá la copia completa y publicá de nuevo.</div></section>';
   const c = mesActual();
   const filas = D.av.filter(r => r[0] === c.y && r[1] === c.m && r[27]);
   let h = '';
