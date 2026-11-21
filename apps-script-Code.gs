@@ -103,7 +103,7 @@ function publicar_(s, req) {
       for (let i = 0, n = 0; i < txt.length; i += PARTE, n++) filas.push([clave, n, txt.slice(i, i + PARTE)]);
     });
     if (!filas.length) throw new Error('No llegaron datos para publicar.');
-    if (h.getLastRow() > 1) h.getRange(2, 1, h.getLastRow() - 1, 3).clearContents();
+    if (h.getLastRow() > 1) h.getRange(2, 1, h.getLastRow() - 1, 3).clearContent();
     h.getRange(2, 1, filas.length, 3).setValues(filas);
     setConfig_('publicado', new Date().toISOString());
     setConfig_('publicado_por', s.user);
@@ -172,12 +172,12 @@ function guardarControl_(s, req) {
       return [mes, k, labels[k] || k, v, vends[v] || '', t, off ? 'NO' : 'OK'];
     });
     const todas = resto.concat(nuevas);
-    if (h.getLastRow() > 1) h.getRange(2, 1, h.getLastRow() - 1, 7).clearContents();
+    if (h.getLastRow() > 1) h.getRange(2, 1, h.getLastRow() - 1, 7).clearContent();
     if (todas.length) { h.getRange(2, 1, todas.length, 1).setNumberFormat('@'); h.getRange(2, 1, todas.length, 7).setValues(todas); }
     if (req.innovMarcas) {
       const hi = ss.getSheetByName(HOJA_INNOV);
       const off = req.innovOff || [];
-      if (hi.getLastRow() > 1) hi.getRange(2, 1, hi.getLastRow() - 1, 2).clearContents();
+      if (hi.getLastRow() > 1) hi.getRange(2, 1, hi.getLastRow() - 1, 2).clearContent();
       const filas = req.innovMarcas.map(m => [m, off.indexOf(m) >= 0 ? 'NO' : 'SI']);
       if (filas.length) hi.getRange(2, 1, filas.length, 2).setValues(filas);
     }
@@ -212,7 +212,7 @@ function guardarUsuarios_(s, req) {
   lock.waitLock(30000);
   try {
     const h = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJA_CRED);
-    if (h.getLastRow() > 1) h.getRange(2, 1, h.getLastRow() - 1, 6).clearContents();
+    if (h.getLastRow() > 1) h.getRange(2, 1, h.getLastRow() - 1, 6).clearContent();
     const filas = users.map(u => [String(u.user).trim().toLowerCase(), String(u.pass), u.rol, u.vid === null || u.vid === undefined ? '' : u.vid, u.nombre || '', u.activo === false ? 'NO' : 'SI']);
     h.getRange(2, 1, filas.length, 6).setValues(filas);
     if (req.verRanking !== undefined) setConfig_('verRanking', req.verRanking ? 'SI' : 'NO');
