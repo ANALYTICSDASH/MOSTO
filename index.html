@@ -931,6 +931,9 @@ function procesarDash(nd, H) {
     nd.av = []; nd.avTot = [];
     nd.ind = parseIndicadores(A);
     nd.prog = parseProgramas(A);
+    // ¿las columnas de los programas vienen con errores de fórmula (#REF!, #N/A…)?
+    nd.meta.dash.progErr = 0;
+    nd.prog.forEach(p => { for (let i = 6; i < A.length; i++) p.meses.forEach(x => { [x.tg, x.av].forEach(j => { if (/^#/.test(String(A[i][j]))) nd.meta.dash.progErr++; }); }); });
     for (let i = 6; i < A.length; i++) {
       const r = A[i];
       const y = parseInt(r[0], 10), m = mesIdx(r[1]);
@@ -1701,7 +1704,11 @@ function renderProgramas() {
   let h = '';
   D.prog.forEach(p => {
     const rows = filas.filter(r => r[27][p.k] && (r[27][p.k].tt || r[27][p.k].m.some(x => x[0] || x[1])));
-    if (!rows.length) return;
+    if (!rows.length) {
+      const err = (D.meta.dash || {}).progErr;
+      h += '<section class="card visual"><h2>Seguimiento · ' + esc(p.label) + '</h2><div class="empty">' + (err ? 'Las columnas de este programa en Avance vienen con errores de fórmula (' + err + ' celdas con #REF! u otro error). Armá la copia liviana pegando la solapa Avance <b>como valores</b>.' : 'Las columnas de este programa en Avance vienen vacías o en cero para ' + MESES_LC[c.m] + '.') + '</div></section>';
+      return;
+    }
     const tot = {m: p.meses.map(() => [0, 0]), tt: 0, dif: 0};
     const cel = (tg, av, cur) => { const pc = tg ? av / tg * 100 : (av ? 100 : 0); return '<td class="' + (cur ? 'cur' : '') + '">' + fmtN(av) + ' / ' + fmtN(tg) + '<span class="pill pill-' + sem(pc) + '">' + (tg ? Math.round(pc) + '%' : '—') + '</span></td>'; };
     let body = '';
