@@ -427,6 +427,11 @@ body:not(.online) .online-only{display:none!important}
 .prov-add label{min-width:220px;flex:1}
 .prov-add button{background:#4b2a86;border-color:#4b2a86}
 .x-prov{min-height:22px;padding:0 7px;margin-left:4px;font-size:13px;line-height:1;background:#ffffff22;border-color:#ffffff66;border-radius:6px}
+
+.ctrl-ocultas{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 12px;font-size:.8rem}
+.ctrl-ocultas:empty{display:none}
+.lbl-oc{font-weight:700;color:var(--muted)}
+.ctrl-ocultas .chip .text-btn{min-height:24px;padding:0 4px;font-size:.76rem}
 </style>
 </head>
 <body>
@@ -642,6 +647,7 @@ body:not(.online) .online-only{display:none!important}
         <label for="cp-met">Medida<select id="cp-met"><option value="v">Ventas $</option><option value="u">Unidades</option><option value="c">Clientes compradores</option></select></label>
         <button type="button" onclick="agregarProv()">Agregar a Control</button>
       </div>
+      <div id="ctrl-ocultas" class="ctrl-ocultas" data-dyn></div>
       <div id="ctrl-box" data-dyn></div>
       <p class="tbl-hint online-only">Los cambios se guardan solos en el Sheet (solapa control) y los ven todos al momento. También se pueden cargar directo en esa solapa.</p>
       <p class="tbl-hint offline-only" id="ctrl-hint">Gris = valor del Excel. Violeta = cargado acá. Los cambios se guardan en este navegador y viajan en el próximo archivo para vendedores.</p>
@@ -1182,7 +1188,25 @@ function ctrlMes(y, m) {
   const c = (typeof CTRL !== 'undefined' && CTRL) || {};
   return (c.meses || {})[y + '-' + String(m + 1).padStart(2, '0')] || null;
 }
+// Variables quitadas en Control (marca hide~clave). Clientes nuevos viene quitada de fábrica (show~clin la vuelve a mostrar).
+const OCULTAS_DEFAULT = ['clin'];
+let __ocCache = {key: null, set: new Set()};
+function marcasCtrl(pref) {
+  const out = new Set();
+  Object.values((typeof CTRL !== 'undefined' && CTRL && CTRL.meses) || {}).forEach(m => Object.keys(m.t || {}).forEach(k => { if (k.indexOf(pref) === 0) out.add(k.slice(pref.length)); }));
+  return out;
+}
+function ocultas() {
+  const key = (typeof CTRL !== 'undefined' && CTRL) ? (CTRL.upd || '') + '|' + Object.keys(CTRL.meses || {}).length + '|' + JSON.stringify(Object.keys(CTRL.meses || {}).map(mk => Object.keys(CTRL.meses[mk].t || {}).filter(k => /^(hide|show)~/.test(k)))) : '';
+  if (__ocCache.key === key) return __ocCache.set;
+  const hide = marcasCtrl('hide~'), show = marcasCtrl('show~');
+  const set = new Set([...hide].concat(OCULTAS_DEFAULT.filter(k => !show.has(k))));
+  __ocCache = {key: key, set: set};
+  return set;
+}
+const esOculta = k => ocultas().has(k);
 function tgt(key, vid, y, m, excel) {
+  if (esOculta(key)) return 0;
   const c = ctrlMes(y, m);
   if (!c) return excel;
   if (c.off && c.off[key] && c.off[key][vid]) return 0;
@@ -1190,8 +1214,6 @@ function tgt(key, vid, y, m, excel) {
   return v !== undefined && v !== null && v !== '' ? num(v) : excel;
 }
 function avFila(r) {
-  const c = ctrlMes(r[0], r[1]);
-  if (!c) return r;
   const x = r.slice();
   x[5] = tgt('ventas', r[2], r[0], r[1], r[5]); x[7] = tgt('unidades', r[2], r[0], r[1], r[7]);
   x[13] = tgt('ccc', r[2], r[0], r[1], r[13]); x[11] = tgt('clin', r[2], r[0], r[1], r[11]);
@@ -1295,7 +1317,7 @@ function renderResumen() {
       k('Unidades', fmtN(a.uni), (a.objU ? 'Target ' + fmtN(a.objU) + ' · ' + pct(a.uniObj, a.objU) + (a.nObjU < a.n ? ' (' + a.nObjU + ' de ' + a.n + ' con target)' : '') + '<br>' : '') + 'Dif. vs mes anterior <b>' + (ex.difU !== undefined ? (ex.difU > 0 ? '+' : '') + fmtN(ex.difU) : '—') + '</b> · var. <b>' + (ex.varU ? pc(ex.varU) : '—') + '</b>', ex.difU < 0 ? 'alert' : '', '#195e50') +
       k('Cobranzas', fmtM(a.cob), 'Cob/Ventas ' + pct(a.cob, realA) + (a.deuda ? ' · deuda vencida ' + fmtM(a.deuda) : ''), '', '#0f7b8a') +
       k('CCC totales', fmtN(a.ccc), a.cccObj ? 'Target ' + fmtN(a.cccObj) + ' · ' + pct(a.ccc, a.cccObj, 0) : 'Sin target', a.cccObj && a.ccc < a.cccObj ? 'alert' : '', '#1d7a4f') +
-      k('Clientes nuevos', fmtN(a.cliN), a.cliNObj ? 'Target ' + fmtN(a.cliNObj) + ' · ' + pct(a.cliN, a.cliNObj, 0) : 'Sin target', '', '#1d7a4f');
+      (esOculta('clin') ? '' : k('Clientes nuevos', fmtN(a.cliN), a.cliNObj ? 'Target ' + fmtN(a.cliNObj) + ' · ' + pct(a.cliN, a.cliNObj, 0) : 'Sin target', '', '#1d7a4f'));
   }
   renderIndicadores();
   renderRitmo(rows, a && !filtroDetalle() && a.objCompleto ? a.obj : 0);
@@ -2419,6 +2441,26 @@ function agregarProv() {
   ctrlRefrescar();
   setTimeout(() => { const el = document.querySelector('.ctrl-tbl th:last-child'); if (el) el.scrollIntoView({behavior: 'smooth', inline: 'end', block: 'nearest'}); }, 100);
 }
+// Quitar / volver a mostrar una variable (vale para todos los vendedores y todos los meses)
+function ocultarVar(k) {
+  const v = ctrlVars().find(x => x.k === k);
+  if (!confirm('¿Quitar «' + (v ? v.label : k) + '» del tablero? No se ve más en Control ni en Resumen. La podés volver a mostrar cuando quieras.')) return;
+  const cur = ctrlCur(true);
+  const meses = [];
+  Object.keys(CTRL.meses).forEach(mk => { const m = CTRL.meses[mk]; if (m.t && m.t['show~' + k]) { delete m.t['show~' + k]; meses.push(mk); } });
+  cur.t['hide~' + k] = {'*': 0};
+  CTRL.upd = new Date().toISOString();
+  if (ONLINE) pushControl(meses); else { lsSet(LS_CTRL, CTRL); if (ROL === 'admin') { lsSet('mosto_ctrl_pend', 1); avisoPendiente(); } }
+  renderControl();
+}
+function mostrarVar(k) {
+  const meses = [];
+  Object.keys(CTRL.meses).forEach(mk => { const m = CTRL.meses[mk]; if (m.t && m.t['hide~' + k]) { delete m.t['hide~' + k]; meses.push(mk); } });
+  if (OCULTAS_DEFAULT.indexOf(k) >= 0) ctrlCur(true).t['show~' + k] = {'*': 0};
+  CTRL.upd = new Date().toISOString();
+  if (ONLINE) pushControl(meses); else { lsSet(LS_CTRL, CTRL); if (ROL === 'admin') { lsSet('mosto_ctrl_pend', 1); avisoPendiente(); } }
+  renderControl();
+}
 function quitarProv(k) {
   if (!confirm('¿Dejar de seguir esta variable? Se borran sus targets cargados.')) return;
   const meses = [];
@@ -2465,12 +2507,16 @@ function renderControl() {
   const box = $('ctrl-box');
   if (!D || !D.av || !D.av.length) { box.innerHTML = '<div class="empty">Cargá los Excel para ver el tablero de control.</div>'; return; }
   const c = mesActual(), cur = ctrlCur(false);
-  const vars = ctrlVars();
+  const todas = ctrlVars();
+  const vars = todas.filter(v => !esOculta(v.k));
+  const ocu = todas.filter(v => esOculta(v.k));
+  const ob = $('ctrl-ocultas');
+  if (ob) ob.innerHTML = ocu.length ? '<span class="lbl-oc">Variables quitadas:</span> ' + ocu.map(v => '<span class="chip gray">' + esc(v.label) + ' <button type="button" class="text-btn" onclick="mostrarVar(\'' + v.k.replace(/'/g, "\\'") + '\')">Volver a mostrar</button></span>').join(' ') : '';
   const filas = D.av.filter(r => r[0] === c.y && r[1] === c.m);
   setTxt('ctrl-sub', 'Mes: ' + MESES_LC[c.m] + ' ' + c.y + '. Vendedores en filas, variables en columnas. OK = la variable se muestra con su target; NO = apagada. Escribí un número para cambiar el target del Excel; dejalo vacío para volver al del Excel.');
   let activos = 0;
   let h = '<div class="tbl-scroll tall"><table class="ctrl-tbl"><thead><tr><th>Vendedor</th>' + vars.map(v =>
-    '<th>' + esc(v.label) + (v.prov ? ' <button type="button" class="x-prov" title="Dejar de seguir" onclick="quitarProv(\'' + v.k.replace(/'/g, "\\'") + '\')">×</button>' : '') + '<div class="colbtns"><button type="button" onclick="ctrlCol(\'' + v.k + '\',true)" title="Encender para todos">Todos OK</button><button type="button" onclick="ctrlCol(\'' + v.k + '\',false)" title="Apagar para todos">Todos NO</button></div></th>').join('') + '</tr></thead><tbody>';
+    '<th>' + esc(v.label) + (v.prov ? ' <button type="button" class="x-prov" title="Dejar de seguir este proveedor" onclick="quitarProv(\'' + v.k.replace(/'/g, "\\'") + '\')">×</button>' : ' <button type="button" class="x-prov" title="Quitar esta variable" onclick="ocultarVar(\'' + v.k.replace(/'/g, "\\'") + '\')">×</button>') + '<div class="colbtns"><button type="button" onclick="ctrlCol(\'' + v.k + '\',true)" title="Encender para todos">Todos OK</button><button type="button" onclick="ctrlCol(\'' + v.k + '\',false)" title="Apagar para todos">Todos NO</button></div></th>').join('') + '</tr></thead><tbody>';
   const tot = vars.map(() => ({t: 0, r: 0, n: 0}));
   filas.forEach(r => {
     const vid = String(r[2]);
@@ -2564,7 +2610,7 @@ function ctrlParaVendedor(vid) {
   const out = {upd: CTRL.upd, meses: {}, innovOff: CTRL.innovOff || []};
   Object.keys(CTRL.meses).forEach(mk => {
     const m = CTRL.meses[mk], o = {t: {}, off: {}};
-    Object.keys(m.t || {}).forEach(k => { if (m.t[k][vid] !== undefined) o.t[k] = {[vid]: m.t[k][vid]}; });
+    Object.keys(m.t || {}).forEach(k => { if (m.t[k][vid] !== undefined) o.t[k] = {[vid]: m.t[k][vid]}; else if (m.t[k]['*'] !== undefined) o.t[k] = {'*': m.t[k]['*']}; });
     Object.keys(m.off || {}).forEach(k => { if (m.off[k][vid]) o.off[k] = {[vid]: 1}; });
     out.meses[mk] = o;
   });

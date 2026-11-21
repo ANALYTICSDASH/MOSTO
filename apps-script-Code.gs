@@ -136,7 +136,7 @@ function leerControl_(s) {
     h.getRange(2, 1, h.getLastRow() - 1, 7).getValues().forEach(r => {
       const mes = mesTxt_(r[0]), k = String(r[1]).trim(), vid = String(r[3]).trim();
       if (!mes || !k || !vid) return;
-      if (s.rol === 'vend' && vid !== String(s.vid)) return;
+      if (s.rol === 'vend' && vid !== String(s.vid) && vid !== '*') return;   // '*' = ajuste para todos (ej. variable quitada)
       const m = out.meses[mes] || (out.meses[mes] = {t: {}, off: {}});
       const est = String(r[6]).trim().toUpperCase();
       if (r[5] !== '' && r[5] !== null && !isNaN(Number(r[5]))) { (m.t[k] = m.t[k] || {})[vid] = Number(r[5]); }
