@@ -2502,7 +2502,7 @@ async function loginOnline(u, p, silencioso) {
       entrarOnline(u, p, c, true);
       return true;
     }
-    if (!silencioso) setTxt('login-msg', 'Sin conexión y sin datos guardados en este dispositivo.');
+    if (!silencioso) setTxt('login-msg', navigator.onLine === false ? 'Sin conexión y sin datos guardados en este dispositivo.' : 'No se pudo conectar con el servidor de datos (Apps Script). Si recién lo instalaste, revisá que la aplicación web esté publicada con acceso «Cualquier persona».');
     return false;
   }
   if (!res.ok) { if (!silencioso) setTxt('login-msg', res.error || 'No se pudo ingresar.'); return false; }
