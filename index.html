@@ -685,7 +685,7 @@ body:not(.online) .online-only{display:none!important}
     </section>
   </section>
 </main>
-<footer><span class="ver">versión 21/11 14:55</span> · Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
+<footer><span class="ver">versión 21/11 15:05</span> · Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
 
 <div class="tt" id="tt"><div class="tt-l" id="tt-l"></div><div class="tt-v" id="tt-v"></div></div>
 
@@ -830,13 +830,21 @@ async function cargarExcel(input) {
     st.className = 'upload-status ' + (avisos.length ? 'loading' : 'ok');
     if (dash && dash.hojas.avance) {
       const nc = Math.max(...dash.hojas.avance.slice(0, 8).map(r => r.length));
-      if (!(D.prog && D.prog.length) || nc < 140) avisos.push('Avance llegó con ' + nc + ' columnas: ' + (D.ind || []).length + ' variables y ' + (D.prog || []).length + ' programas (combos). Revisá que la copia tenga hasta la columna EZ con sus encabezados');
+      const perdioProg = prev && prev.prog && prev.prog.length && !(D.prog && D.prog.length);
+      if (perdioProg || nc < 140) avisos.push('Avance llegó con ' + nc + ' columnas: ' + (D.ind || []).length + ' variables y ' + (D.prog || []).length + ' programas (combos). Revisá que la copia tenga hasta la columna EZ con sus encabezados');
     }
     st.className = 'upload-status ' + (avisos.length ? 'loading' : 'ok');
     st.textContent = (avisos.length ? '⚠ ' + avisos.join(' · ') + ' · ' : '✅ ') + libros.map(l => l.archivo).join(' + ') + (D.ind ? ' · Avance: ' + D.ind.length + ' variables, ' + (D.prog || []).length + ' programa(s)' : '');
     CTRL = loadCtrl();
     poblarFiltros();
     renderAll();
+    // Publicación automática (modo online): sólo si todo se leyó bien
+    if (ONLINE && ROL === 'admin') {
+      const resumen = 'Avance: ' + (D.ind || []).length + ' variables, ' + (D.prog || []).length + ' programa(s)';
+      const listo = !avisos.length && D.rows && D.rows.length && D.av && D.av.length && D.ini && D.ini.padron && D.ini.padron.length;
+      if (listo) await publicarOnline(resumen);
+      else { st.textContent += ' · No se publicó: revisá el aviso y, si está bien, tocá «Publicar datos».'; }
+    }
   } catch (err) {
     console.error(err);
     st.className = 'upload-status err';
@@ -2758,7 +2766,7 @@ async function autoLoginOnline() {
 }
 
 // ── publicar (admin) ─────────────────────────────────────
-async function publicarOnline() {
+async function publicarOnline(auto) {
   if (!D || !D.rows) { alert('Primero cargá los Excel.'); return; }
   const btn = $('btn-desc'); btn.disabled = true;
   try {
@@ -2772,7 +2780,7 @@ async function publicarOnline() {
     const res = await api('publicar', {payloads: payloads, meta: {archivos: D.meta.archivos}});
     if (!res.ok) throw new Error(res.error);
     SES.meta = {publicado: new Date().toISOString(), archivos: (D.meta.archivos || []).join(' + ')};
-    setStatus('✅ Publicado: ' + Object.keys(payloads).length + ' accesos actualizados', 'ok');
+    setStatus(auto ? '✅ Cargado y publicado: ' + Object.keys(payloads).length + ' accesos actualizados · ' + auto : '✅ Publicado: ' + Object.keys(payloads).length + ' accesos actualizados', 'ok');
     setTxt('clock', 'Datos publicados el ' + new Date().toLocaleDateString('es-AR') + ' ' + new Date().toLocaleTimeString('es-AR', {hour: '2-digit', minute: '2-digit'}));
   } catch (e) {
     setStatus('❌ No se pudo publicar: ' + (e.message === 'SIN_CONEXION' ? 'sin conexión' : e.message), 'err');
