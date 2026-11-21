@@ -416,6 +416,17 @@ label.check.innov{margin-top:6px;font-weight:500}
 body.online .offline-only{display:none!important}
 body:not(.online) .online-only{display:none!important}
 .save-st{font-size:.8rem;font-weight:700;color:var(--good)}
+
+.var-card{text-align:left;font-weight:400;color:inherit;cursor:pointer;min-height:0;width:100%}
+.var-card:hover{border-color:#aec8e7;filter:none}
+.var-card.is-open{border-color:#2f5e99;box-shadow:inset 0 0 0 1px #2f5e99}
+.ind-det{margin-top:14px;padding:16px;border:1px solid var(--line);border-radius:12px;background:#f6f9fd}
+.ind-det h3{font-size:1rem;color:var(--ink)}
+.ind-det p{margin:4px 0 0;font-size:.8rem;color:var(--muted)}
+.prov-add{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:14px 0;padding:14px;border:1px dashed #c6b6e6;border-radius:12px;background:#faf8fe}
+.prov-add label{min-width:220px;flex:1}
+.prov-add button{background:#4b2a86;border-color:#4b2a86}
+.x-prov{min-height:22px;padding:0 7px;margin-left:4px;font-size:13px;line-height:1;background:#ffffff22;border-color:#ffffff66;border-radius:6px}
 </style>
 </head>
 <body>
@@ -625,6 +636,11 @@ body:not(.online) .online-only{display:none!important}
           <input type="file" id="ctrl-file" accept=".json" hidden onchange="ctrlImportar(this)">
           <button type="button" class="secondary" onclick="ctrlReset()">Volver a los valores del Excel</button>
         </div>
+      </div>
+      <div class="prov-add">
+        <label for="cp-prov">Seguir un proveedor<select id="cp-prov"><option value="">Elegí un proveedor…</option></select></label>
+        <label for="cp-met">Medida<select id="cp-met"><option value="v">Ventas $</option><option value="u">Unidades</option><option value="c">Clientes compradores</option></select></label>
+        <button type="button" onclick="agregarProv()">Agregar a Control</button>
       </div>
       <div id="ctrl-box" data-dyn></div>
       <p class="tbl-hint online-only">Los cambios se guardan solos en el Sheet (solapa control) y los ven todos al momento. También se pueden cargar directo en esa solapa.</p>
@@ -1210,7 +1226,7 @@ function indicadoresActivos(vend) {
       const o = tgt(d.k, r[2], c.y, c.m, v[1]);
       if (o > 0) { real += v[0]; obj += o; n++; }
     });
-    return {k: d.k, label: d.label, real: real, obj: obj, n: n, total: rs.length};
+    return {k: d.k, label: d.label, real: real, obj: obj, n: n, total: rs.length, kind: 'ind'};
   }).filter(x => x.obj > 0);
 }
 // Ventas, unidades, CCC y clientes nuevos también entran si tienen target (Excel o Control)
@@ -1222,7 +1238,7 @@ function indicadoresBase(vend) {
   return CTRL_VARS.map(v => {
     let real = 0, obj = 0, n = 0;
     rs.forEach(r => { if (r[v.col] > 0) { real += r[realIdx[v.k]]; obj += r[v.col]; n++; } });
-    return {k: v.k, label: v.label.replace(' $', ''), real: real, obj: obj, n: n, total: rs.length, money: !!v.money};
+    return {k: v.k, label: v.label.replace(' $', ''), real: real, obj: obj, n: n, total: rs.length, money: !!v.money, kind: 'base'};
   }).filter(x => x.obj > 0);
 }
 function mesActual() {
@@ -1290,18 +1306,57 @@ function renderResumen() {
 }
 
 // ── Indicadores con target (marcas / proveedores) ────────
+let __selVar = '';
+function indicadoresTodos(vend) { return indicadoresBase(vend).concat(indicadoresActivos(vend), indicadoresProv(vend)); }
+// Proveedores seguidos desde Control (ventas $, unidades o clientes del mes, desde bases)
+function indicadoresProv(vend) {
+  if (!D || !D.av || !D.rows || typeof provDefs !== 'function') return [];
+  const c = mesActual();
+  const rs = D.av.filter(r => r[0] === c.y && r[1] === c.m && (vend === '' || String(r[2]) === String(vend)));
+  return provDefs().map(d => {
+    let real = 0, obj = 0, n = 0;
+    rs.forEach(r => { const o = tgt(d.k, r[2], c.y, c.m, 0); if (o > 0) { real += provReal(d, r[2]); obj += o; n++; } });
+    return {k: d.k, label: d.label, real: real, obj: obj, n: n, total: rs.length, money: d.metric === 'v', kind: 'prov', def: d};
+  }).filter(x => x.obj > 0);
+}
+function varPorVendedor(x) {
+  const c = mesActual();
+  const rs = D.av.filter(r => r[0] === c.y && r[1] === c.m).map(avFila);
+  const realIdx = {ventas: 4, unidades: 6, ccc: 12, clin: 10};
+  return rs.map(r => {
+    let real = 0, obj = 0;
+    if (x.kind === 'base') { const v = CTRL_VARS.find(z => z.k === x.k); obj = r[v.col]; real = r[realIdx[x.k]]; }
+    else if (x.kind === 'ind') { const v = (r[26] || {})[x.k] || [0, 0]; real = v[0]; obj = tgt(x.k, r[2], c.y, c.m, v[1]); }
+    else { real = provReal(x.def, r[2]); obj = tgt(x.k, r[2], c.y, c.m, 0); }
+    return {vid: r[2], name: vendName(r[2]), real: real, obj: obj};
+  }).filter(o => o.obj > 0).sort((a, b) => b.real / b.obj - a.real / a.obj);
+}
+function selVar(k) { __selVar = __selVar === k ? '' : k; renderIndicadores(); if (__selVar) { const d = $('ind-det'); if (d) d.scrollIntoView({behavior: 'smooth', block: 'nearest'}); } }
 function renderIndicadores() {
   const box = $('ind-box'); if (!box) return;
-  const list = indicadoresBase(F.vend).concat(indicadoresActivos(F.vend));
-  setTxt('ind-sub', (F.vend ? vendName(F.vend) : 'Total compañía') + ' · aparecen solas las variables que tienen target cargado (en Avance o en Control).');
+  const list = indicadoresTodos(F.vend);
+  setTxt('ind-sub', (F.vend ? vendName(F.vend) : 'Total compañía') + ' · aparecen solas las variables que tienen target (en Avance o en Control). Tocá una para ver el avance de cada vendedor.');
   if (!list.length) { box.innerHTML = '<div class="empty">No hay variables con target para ' + (F.vend ? esc(vendName(F.vend)) : 'este mes') + '.</div>'; return; }
-  box.innerHTML = '<div class="cat-cards">' + list.map(x => {
-    const p = x.obj ? x.real / x.obj * 100 : 0, falt = x.obj - x.real;
-    const nr = x.money ? fmtM : (v => (Math.round(v * 10) / 10).toLocaleString('es-AR'));
-    return '<article class="card cat-card"><h3>' + esc(x.label) + '</h3><strong>' + nr(x.real) + '</strong><span class="dim"> / ' + nr(x.obj) + '</span>' +
+  if (__selVar && !list.some(x => x.k === __selVar)) __selVar = '';
+  const fmtX = x => x.money ? fmtM : (v => (Math.round(v * 10) / 10).toLocaleString('es-AR'));
+  let h = '<div class="cat-cards">' + list.map(x => {
+    const p = x.obj ? x.real / x.obj * 100 : 0, falt = x.obj - x.real, nr = fmtX(x);
+    return '<button type="button" class="card cat-card var-card' + (__selVar === x.k ? ' is-open' : '') + '" onclick="selVar(\'' + x.k.replace(/'/g, "\\'") + '\')" aria-expanded="' + (__selVar === x.k) + '"><h3>' + esc(x.label) + '</h3><strong>' + nr(x.real) + '</strong><span class="dim"> / ' + nr(x.obj) + '</span>' +
       '<div class="track"><div class="fill ' + sem(p) + '" data-w="' + Math.min(100, p).toFixed(0) + '"></div></div>' +
-      '<p><span class="ratio ' + sem(p) + '">' + Math.round(p) + '%</span> · ' + (falt > 0 ? 'faltan ' + nr(falt) : 'cumplido') + (!F.vend && x.n < x.total ? ' · ' + x.n + ' de ' + x.total + ' vendedores' : '') + '</p></article>';
+      '<p><span class="ratio ' + sem(p) + '">' + Math.round(p) + '%</span> · ' + (falt > 0 ? 'faltan ' + nr(falt) : 'cumplido') + (!F.vend ? ' · ' + x.n + ' de ' + x.total + ' vendedores' : '') + '</p></button>';
   }).join('') + '</div>';
+  const sel = list.find(x => x.k === __selVar);
+  if (sel) {
+    const vs = varPorVendedor(sel).filter(o => !F.vend || String(o.vid) === String(F.vend));
+    const nr = fmtX(sel);
+    h += '<div id="ind-det" class="ind-det"><div class="card-head"><div><h3>' + esc(sel.label) + ' · por vendedor</h3><p>' + vs.length + ' vendedores con target · ordenados por avance</p></div><button type="button" class="text-btn" onclick="selVar(\'' + sel.k.replace(/'/g, "\\'") + '\')">Cerrar</button></div><div class="rows">' +
+      vs.map((o, i) => { const p = o.real / o.obj * 100, f = o.obj - o.real;
+        return '<div class="data-row"><div class="rank-name"><span class="rank ' + (i < 3 ? 'r' + (i + 1) : '') + '">' + (i + 1) + '</span><div class="row-name">' + esc(o.name) + '</div></div>' +
+          '<div class="track"><div class="fill ' + sem(p) + '" data-w="' + Math.min(100, p).toFixed(0) + '"></div></div><div class="ratio ' + sem(p) + '">' + Math.round(p) + '%</div>' +
+          '<div class="amounts"><div><small>Avance</small><strong>' + nr(o.real) + '</strong></div><div><small>Target</small><strong>' + nr(o.obj) + '</strong></div><div><small>' + (f > 0 ? 'Faltan' : 'Superó por') + '</small><strong class="' + (f > 0 ? 'alert' : 'ok') + '">' + nr(Math.abs(f)) + '</strong></div></div></div>'; }).join('') +
+      '</div></div>';
+  }
+  box.innerHTML = h;
   animarBarras(box);
 }
 
@@ -2325,15 +2380,61 @@ function ctrlCur(crear) {
 }
 function ctrlVars() {
   return CTRL_VARS.map(v => ({k: v.k, label: v.label, money: !!v.money, col: v.col}))
-    .concat((D.ind || []).map(d => ({k: d.k, label: d.label, ind: true})));
+    .concat((D.ind || []).map(d => ({k: d.k, label: d.label, ind: true})))
+    .concat(provDefs().map(d => ({k: d.k, label: d.label, prov: true, money: d.metric === 'v', def: d})));
+}
+// ── Proveedores que se siguen (clave: prov~métrica~proveedor) ──
+const PROV_MET = {v: '$', u: 'unidades', c: 'clientes'};
+function provDefs() {
+  const ks = new Set();
+  Object.values((CTRL && CTRL.meses) || {}).forEach(m => { Object.keys(m.t || {}).concat(Object.keys(m.off || {})).forEach(k => { if (k.indexOf('prov~') === 0) ks.add(k); }); });
+  return [...ks].sort().map(k => { const p = k.split('~'); const nom = p.slice(2).join('~'); return {k: k, metric: p[1], prov: nom, label: 'Prov. ' + titulo(nom) + ' · ' + (PROV_MET[p[1]] || p[1])}; });
+}
+let __provCache = {key: '', m: {}};
+function provReal(d, vid) {
+  const key = (D && D.meta ? D.meta.fecha : '') + '|' + (D && D.rows ? D.rows.length : 0);
+  if (__provCache.key !== key) __provCache = {key: key, m: {}};
+  let m = __provCache.m[d.k];
+  if (!m) {
+    m = {}; const pi = D.dims && D.dims.prov ? D.dims.prov.indexOf(d.prov) : -1;
+    const cs = {};
+    if (pi >= 0) D.rows.forEach(r => {
+      if (D.prod[r[3]][2] !== pi) return;
+      const v = String(r[1]);
+      if (d.metric === 'c') (cs[v] = cs[v] || new Set()).add(r[2]);
+      else m[v] = (m[v] || 0) + (d.metric === 'u' ? r[5] : r[4]);
+    });
+    Object.keys(cs).forEach(v => { m[v] = cs[v].size; });
+    __provCache.m[d.k] = m;
+  }
+  return m[String(vid)] || 0;
+}
+function agregarProv() {
+  const prov = $('cp-prov').value, met = $('cp-met').value;
+  if (!prov) { alert('Elegí un proveedor.'); return; }
+  const k = 'prov~' + met + '~' + prov;
+  if (provDefs().some(d => d.k === k)) { alert('Ese proveedor ya está en Control con esa medida.'); return; }
+  const cur = ctrlCur(true);
+  cur.t[k] = cur.t[k] || {}; cur.t[k]['0'] = 0;      // marca para que la columna quede guardada
+  ctrlRefrescar();
+  setTimeout(() => { const el = document.querySelector('.ctrl-tbl th:last-child'); if (el) el.scrollIntoView({behavior: 'smooth', inline: 'end', block: 'nearest'}); }, 100);
+}
+function quitarProv(k) {
+  if (!confirm('¿Dejar de seguir esta variable? Se borran sus targets cargados.')) return;
+  const meses = [];
+  Object.keys(CTRL.meses).forEach(mk => { const m = CTRL.meses[mk]; if ((m.t && m.t[k]) || (m.off && m.off[k])) { delete m.t[k]; if (m.off) delete m.off[k]; meses.push(mk); } });
+  CTRL.upd = new Date().toISOString();
+  if (ONLINE) pushControl(meses); else lsSet(LS_CTRL, CTRL);
+  renderControl();
 }
 function excelTarget(v, row) {
-  if (!row) return 0;
+  if (!row || v.prov) return 0;
   if (v.ind) return row[26] && row[26][v.k] ? row[26][v.k][1] : 0;
   return row[v.col] || 0;
 }
 function excelReal(v, row) {
   if (!row) return 0;
+  if (v.prov) return provReal(v.def, row[2]);
   if (v.ind) return row[26] && row[26][v.k] ? row[26][v.k][0] : 0;
   return {ventas: row[4], unidades: row[6], ccc: row[12], clin: row[10]}[v.k] || 0;
 }
@@ -2359,6 +2460,8 @@ function innovSet(i, on) {
 }
 function renderControl() {
   renderInnov();
+  const sp = $('cp-prov');
+  if (sp && D && D.dims) { const cur = sp.value; sp.innerHTML = '<option value="">Elegí un proveedor…</option>' + D.dims.prov.filter(x => x !== '(sin dato)').slice().sort((a, b) => a.localeCompare(b)).map(p => '<option>' + esc(p) + '</option>').join(''); sp.value = cur; }
   const box = $('ctrl-box');
   if (!D || !D.av || !D.av.length) { box.innerHTML = '<div class="empty">Cargá los Excel para ver el tablero de control.</div>'; return; }
   const c = mesActual(), cur = ctrlCur(false);
@@ -2367,7 +2470,7 @@ function renderControl() {
   setTxt('ctrl-sub', 'Mes: ' + MESES_LC[c.m] + ' ' + c.y + '. Vendedores en filas, variables en columnas. OK = la variable se muestra con su target; NO = apagada. Escribí un número para cambiar el target del Excel; dejalo vacío para volver al del Excel.');
   let activos = 0;
   let h = '<div class="tbl-scroll tall"><table class="ctrl-tbl"><thead><tr><th>Vendedor</th>' + vars.map(v =>
-    '<th>' + esc(v.label) + '<div class="colbtns"><button type="button" onclick="ctrlCol(\'' + v.k + '\',true)" title="Encender para todos">Todos OK</button><button type="button" onclick="ctrlCol(\'' + v.k + '\',false)" title="Apagar para todos">Todos NO</button></div></th>').join('') + '</tr></thead><tbody>';
+    '<th>' + esc(v.label) + (v.prov ? ' <button type="button" class="x-prov" title="Dejar de seguir" onclick="quitarProv(\'' + v.k.replace(/'/g, "\\'") + '\')">×</button>' : '') + '<div class="colbtns"><button type="button" onclick="ctrlCol(\'' + v.k + '\',true)" title="Encender para todos">Todos OK</button><button type="button" onclick="ctrlCol(\'' + v.k + '\',false)" title="Apagar para todos">Todos NO</button></div></th>').join('') + '</tr></thead><tbody>';
   const tot = vars.map(() => ({t: 0, r: 0, n: 0}));
   filas.forEach(r => {
     const vid = String(r[2]);
@@ -2560,11 +2663,15 @@ async function publicarOnline() {
 }
 
 // ── control en el Sheet ──────────────────────────────────
-let __ctrlTimer = null;
-function pushControl() {
+let __ctrlTimer = null; const __mesesPend = new Set();
+function pushControl(otrosMeses) {
   clearTimeout(__ctrlTimer);
   setTxt('ctrl-save', 'Guardando…');
+  (otrosMeses || []).forEach(mk => { if (mk !== ctrlKeyMes()) __mesesPend.add(mk); });
   __ctrlTimer = setTimeout(async () => {
+    for (const mk of [...__mesesPend]) {
+      try { await api('control_set', {mes: mk, data: CTRL.meses[mk] || {t: {}, off: {}}, labels: {}, vends: {}}); __mesesPend.delete(mk); } catch (e) {}
+    }
     const mes = ctrlKeyMes();
     const labels = {}; ctrlVars().forEach(v => { labels[v.k] = v.label; });
     const vends = {}; (D.av || []).forEach(r => { vends[r[2]] = r[3]; });
