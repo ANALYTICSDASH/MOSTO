@@ -685,7 +685,7 @@ body:not(.online) .online-only{display:none!important}
     </section>
   </section>
 </main>
-<footer><span class="ver">versión 21/11 14:45</span> · Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
+<footer><span class="ver">versión 21/11 14:55</span> · Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
 
 <div class="tt" id="tt"><div class="tt-l" id="tt-l"></div><div class="tt-v" id="tt-v"></div></div>
 
@@ -821,7 +821,7 @@ async function cargarExcel(input) {
     const prev = D;
     const nd = {meta: {archivos: libros.map(l => l.archivo), fecha: new Date().toISOString()}, vend: {}, vendLong: {}};
     // Si sólo se carga uno de los dos, se conserva lo del otro
-    if (dash) procesarDash(nd, dash.hojas); else if (prev) copiar(nd, prev, ['rows','cli','prod','dims','av','ccc','vend','vendLong','metaDash']);
+    if (dash) procesarDash(nd, dash.hojas); else if (prev) copiar(nd, prev, ['rows','cli','prod','dims','av','avTot','ind','prog','ccc','vend','vendLong']);
     if (nuevo) procesarNuevo(nd, nuevo.hojas); else if (prev) { copiar(nd, prev, ['ini','vol','auxCat']); aplicarCat(nd, nd.auxCat || {}); }
     D = nd;
     const avisos = [];
@@ -844,7 +844,12 @@ async function cargarExcel(input) {
   }
   input.value = '';
 }
-function copiar(dst, src, keys) { keys.forEach(k => { if (src[k] !== undefined) dst[k] = src[k]; }); if (src.meta && src.meta.dash) dst.meta.dash = src.meta.dash; }
+function copiar(dst, src, keys) {
+  keys.forEach(k => { if (src[k] !== undefined) dst[k] = src[k]; });
+  if (keys.indexOf('rows') >= 0 && src.meta && src.meta.dash) dst.meta.dash = src.meta.dash;
+  // los nombres de archivo de la carga anterior se conservan, para saber de dónde viene cada parte
+  if (src.meta && src.meta.archivos) src.meta.archivos.forEach(a => { if (dst.meta.archivos.indexOf(a) < 0 && !/seguimiento/i.test(a) === (keys.indexOf('rows') >= 0)) dst.meta.archivos.push(a); });
+}
 
 function colMap(hdr) {
   const m = {};
