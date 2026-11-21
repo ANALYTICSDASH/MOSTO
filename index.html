@@ -435,6 +435,17 @@ body:not(.online) .online-only{display:none!important}
 
 .faltan-users{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px;padding:12px;border:1px dashed #bdc5ce;border-radius:10px;font-size:.85rem}
 .faltan-users button{min-height:36px;padding:6px 12px;font-size:.82rem}
+
+.seg-block+.seg-block{margin-top:22px}
+.seg-block h3{font-size:1.1rem;color:var(--ink)}
+.seg-block p{margin:4px 0 0;font-size:.84rem;color:var(--muted)}
+.seg-tbl th,.seg-tbl td{text-align:center}
+.seg-tbl th:first-child,.seg-tbl td:first-child{text-align:left}
+.seg-tbl th.grp{background:#e9eff7;color:var(--deep);border-left:2px solid #c3d2e5}
+.seg-tbl tr:nth-child(2) th:nth-child(4n+1){border-left:2px solid #c3d2e5}
+.seg-tbl td:nth-child(4n+2){border-left:2px solid #e1e8f1}
+.seg-tbl tr.tot td{background:#f6f9fd;font-weight:700}
+.seg-tbl tr.is-sel td{background:#e7eef8}
 </style>
 </head>
 <body>
@@ -511,6 +522,10 @@ body:not(.online) .online-only{display:none!important}
     <section class="card visual">
       <h2>Variables con target</h2><p id="ind-sub">—</p>
       <div id="ind-box" data-dyn></div>
+    </section>
+
+    <section class="card visual" id="seg-sec" hidden>
+      <div id="seg-box" data-dyn></div>
     </section>
 
     <div class="two" style="margin-top:18px">
@@ -685,7 +700,7 @@ body:not(.online) .online-only{display:none!important}
     </section>
   </section>
 </main>
-<footer><span class="ver">versión 21/11 15:05</span> · Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
+<footer><span class="ver">versión 21/11 15:15</span> · Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
 
 <div class="tt" id="tt"><div class="tt-l" id="tt-l"></div><div class="tt-v" id="tt-v"></div></div>
 
@@ -884,8 +899,9 @@ function parseIndicadores(A) {
     if (!h || grupoCol < 0) continue;
     const g = norm(r4[grupoCol]).replace(/\//g, '/');
     if (IND_EXCLUIR.includes(norm(r4[grupoCol]))) continue;
-    let real = [], label = '';
+    let real = [], label = '', esTG = false;
     if (/^tg/.test(h)) {
+      esTG = true;
       if (h.indexOf('total') >= 0) continue;
       const mi = MESES_LC.findIndex(m => h.indexOf(m.slice(0, 3)) >= 0);
       if (mi >= 0 && hoy >= 0 && mi !== hoy) continue;
@@ -904,7 +920,7 @@ function parseIndicadores(A) {
     let k = norm(label).replace(/[^a-z0-9]/g, '');
     while (usados.has(k)) k += '_';
     usados.add(k);
-    defs.push({k: k, label: label, real: real, obj: j});
+    defs.push({k: k, label: label, real: real, obj: j, tg: esTG, grupo: titulo(r4[grupoCol])});
   }
   return defs;
 }
@@ -1405,6 +1421,42 @@ function renderIndicadores() {
   }
   box.innerHTML = h;
   animarBarras(box);
+  renderSeguimientos();
+}
+
+// ── Seguimientos con TG del mes (ej. CAMPARI: CCC y Ejecuciones) ──
+function renderSeguimientos() {
+  const box = $('seg-box'), sec = $('seg-sec'); if (!box || !sec) return;
+  if (!D || !D.ind || !D.av) { sec.hidden = true; return; }
+  const progs = new Set((D.prog || []).map(p => norm(p.label)));
+  const grupos = {};
+  D.ind.filter(d => d.tg && !progs.has(norm(d.grupo || '')) && !esOculta(d.k)).forEach(d => { (grupos[d.grupo] = grupos[d.grupo] || []).push(d); });
+  const c = mesActual();
+  const filas = D.av.filter(r => r[0] === c.y && r[1] === c.m && (F.vend === '' || String(r[2]) === String(F.vend)));
+  let h = '';
+  Object.keys(grupos).forEach(gname => {
+    const defs = grupos[gname];
+    const sub = d => d.label.indexOf(' · ') > 0 ? d.label.slice(d.label.indexOf(' · ') + 3) : d.label;
+    const val = (r, d) => { const v = (r[26] || {})[d.k] || [0, 0]; return [v[0], tgt(d.k, r[2], c.y, c.m, v[1])]; };
+    const rows = filas.filter(r => defs.some(d => { const v = val(r, d); return v[0] || v[1]; }));
+    if (!rows.length) return;
+    const tot = defs.map(() => [0, 0]);
+    const nr = v => (Math.round(v * 10) / 10).toLocaleString('es-AR');
+    const celdas = v => {
+      const p = v[1] ? v[0] / v[1] * 100 : null, f = v[1] - v[0];
+      return '<td>' + nr(v[1]) + '</td><td><b>' + nr(v[0]) + '</b></td><td>' + (v[1] ? (f > 0 ? '<span class="alert">' + nr(f) + '</span>' : '<span class="ok">✓</span>') : '—') + '</td><td>' + (p === null ? '<span class="pill pill-mid" title="Sin target cargado">s/target</span>' : '<span class="pill pill-' + sem(p) + '">' + Math.round(p) + '%</span>') + '</td>';
+    };
+    let body = '';
+    rows.forEach(r => {
+      body += '<tr class="' + (String(F.vend) === String(r[2]) && ROL !== 'vend' ? 'is-sel' : '') + '"><td>' + esc(vendName(r[2])) + '</td>' + defs.map((d, i) => { const v = val(r, d); tot[i][0] += v[0]; tot[i][1] += v[1]; return celdas(v); }).join('') + '</tr>';
+    });
+    if (rows.length > 1) body += '<tr class="tot"><td>Total</td>' + tot.map(celdas).join('') + '</tr>';
+    h += '<section class="seg-block"><h3>Seguimiento · ' + esc(gname) + '</h3><p>Target, avance y lo que falta de cada vendedor (columnas de Avance). Si no hay target cargado, se muestra igual el avance.</p>' +
+      '<div class="tbl-scroll"><table class="vtbl seg-tbl"><thead><tr><th rowspan="2">Vendedor</th>' + defs.map(d => '<th colspan="4" class="grp">' + esc(sub(d)) + '</th>').join('') + '</tr><tr>' +
+      defs.map(() => '<th>Target</th><th>Avance</th><th>Faltan</th><th>%</th>').join('') + '</tr></thead><tbody>' + body + '</tbody></table></div></section>';
+  });
+  sec.hidden = !h;
+  box.innerHTML = h;
 }
 
 // ── Gráfico: ritmo del mes ───────────────────────────────
