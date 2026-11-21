@@ -685,7 +685,7 @@ body:not(.online) .online-only{display:none!important}
     </section>
   </section>
 </main>
-<footer><span class="ver">versión 21/11 14:30</span> · Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
+<footer><span class="ver">versión 21/11 14:45</span> · Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
 
 <div class="tt" id="tt"><div class="tt-l" id="tt-l"></div><div class="tt-v" id="tt-v"></div></div>
 
@@ -926,6 +926,7 @@ function procesarDash(nd, H) {
   // Avance: historial mensual por vendedor
   if (H.avance) {
     const A = H.avance;
+    nd.meta.dash.avCols = Math.max(...A.slice(0, 8).map(r => r.length));
     nd.meta.dash.diasHab = num((A[1] || [])[2]);
     nd.meta.dash.diasTrab = num((A[2] || [])[2]);
     nd.av = []; nd.avTot = [];
@@ -1699,7 +1700,7 @@ function renderPenaflor() {
 }
 function renderProgramas() {
   if (!D.av) return '';
-  if (!D.prog || !D.prog.length) return '<section class="card visual"><h2>Seguimiento de combos</h2><div class="empty">No encontré en la solapa Avance un bloque con targets por mes (TG OCT / AVANCE OCT / … / TG TOTAL / DIF). Si los datos se publicaron desde una copia del dash sin esas columnas, cargá la copia completa y publicá de nuevo.</div></section>';
+  if (!D.prog || !D.prog.length) return '<section class="card visual"><h2>Seguimiento de combos</h2><div class="empty">No encontré en la solapa Avance un bloque con targets por mes (TG OCT / AVANCE OCT / … / TG TOTAL / DIF). Si los datos se publicaron desde una copia del dash sin esas columnas, cargá la copia completa y publicá de nuevo.<br><small>Datos de: ' + esc((D.meta.archivos || []).join(' + ')) + ' · Avance con ' + ((D.meta.dash || {}).avCols || '¿?') + ' columnas (el dash completo tiene 156).</small></div></section>';
   const c = mesActual();
   const filas = D.av.filter(r => r[0] === c.y && r[1] === c.m && r[27]);
   let h = '';
