@@ -828,7 +828,12 @@ async function cargarExcel(input) {
     if (!dash && !prev) avisos.push('falta el dash');
     if (!nuevo && !(prev && prev.ini)) avisos.push('falta NUEVO_SEGUIMIENTO');
     st.className = 'upload-status ' + (avisos.length ? 'loading' : 'ok');
-    st.textContent = (avisos.length ? '⚠ ' + avisos.join(' · ') + ' · ' : '✅ ') + libros.map(l => l.archivo).join(' + ');
+    if (dash && dash.hojas.avance) {
+      const nc = Math.max(...dash.hojas.avance.slice(0, 8).map(r => r.length));
+      if (!(D.prog && D.prog.length) || nc < 140) avisos.push('Avance llegó con ' + nc + ' columnas: ' + (D.ind || []).length + ' variables y ' + (D.prog || []).length + ' programas (combos). Revisá que la copia tenga hasta la columna EZ con sus encabezados');
+    }
+    st.className = 'upload-status ' + (avisos.length ? 'loading' : 'ok');
+    st.textContent = (avisos.length ? '⚠ ' + avisos.join(' · ') + ' · ' : '✅ ') + libros.map(l => l.archivo).join(' + ') + (D.ind ? ' · Avance: ' + D.ind.length + ' variables, ' + (D.prog || []).length + ' programa(s)' : '');
     CTRL = loadCtrl();
     poblarFiltros();
     renderAll();
