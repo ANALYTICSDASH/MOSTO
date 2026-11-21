@@ -432,6 +432,9 @@ body:not(.online) .online-only{display:none!important}
 .ctrl-ocultas:empty{display:none}
 .lbl-oc{font-weight:700;color:var(--muted)}
 .ctrl-ocultas .chip .text-btn{min-height:24px;padding:0 4px;font-size:.76rem}
+
+.faltan-users{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px;padding:12px;border:1px dashed #bdc5ce;border-radius:10px;font-size:.85rem}
+.faltan-users button{min-height:36px;padding:6px 12px;font-size:.82rem}
 </style>
 </head>
 <body>
@@ -2153,21 +2156,58 @@ function vendedoresActivos() {
   const ids = [...new Set(D.av.filter(r => r[0] === c.y && r[1] === c.m).map(r => r[2]))];
   return ids.map(id => ({vid: id, nombre: vendName(id)}));
 }
+function normRol(r) {
+  const s = norm(r);
+  if (/^(admin|administrador|administradora)$/.test(s)) return 'admin';
+  if (/^(owner|dueno|duena|dueño|propietario)$/.test(s)) return 'owner';
+  return 'vend';
+}
+// Busca a qué vendedor de Avance corresponde un usuario (por id, nombre o usuario)
+function vendDeUsuario(u, vs) {
+  if (u.vid !== null && u.vid !== undefined && String(u.vid) !== '') { const v = vs.find(x => String(x.vid) === String(u.vid)); if (v) return v; }
+  return vs.find(x => norm(x.nombre) === norm(u.nombre) || slugUser(x.nombre) === u.user) || null;
+}
 function cfgUsuarios() {
   let cfg = usersGet() || {users: [], verRanking: true};
   const vs = vendedoresActivos();
   let cambio = false;
-  if (!cfg.users.some(u => u.rol === 'owner')) { cfg.users.unshift({user: 'miola', pass: genPass(), rol: 'owner', vid: null, nombre: 'Alejandro Miola (dueño)', activo: true}); cambio = true; }
-  vs.forEach(v => {
-    if (!cfg.users.some(u => u.rol === 'vend' && String(u.vid) === String(v.vid))) {
-      let base = slugUser(v.nombre), user = base, k = 2;
-      while (cfg.users.some(u => u.user === user)) user = base + k++;
-      cfg.users.push({user: user, pass: genPass(), rol: 'vend', vid: v.vid, nombre: v.nombre, activo: true}); cambio = true;
-    }
+  // normalizar lo que venga escrito a mano en el Sheet
+  cfg.users.forEach(u => {
+    const r = normRol(u.rol); if (r !== u.rol) { u.rol = r; cambio = true; }
+    if (u.rol === 'vend') { const v = vendDeUsuario(u, vs); if (v && String(u.vid) !== String(v.vid)) { u.vid = v.vid; cambio = true; } }
   });
-  cfg.users.forEach(u => { if (u.rol === 'vend') { const v = vs.find(x => String(x.vid) === String(u.vid)); if (v && u.nombre !== v.nombre) { u.nombre = v.nombre; cambio = true; } } });
+  // quitar duplicados exactos (mismo usuario)
+  const vistos = new Set();
+  const antes = cfg.users.length;
+  cfg.users = cfg.users.filter(u => { const k = String(u.user).toLowerCase(); if (vistos.has(k)) return false; vistos.add(k); return true; });
+  if (cfg.users.length !== antes) cambio = true;
+  if (!ONLINE) {
+    // archivo maestro local: se crean solos como antes
+    if (!cfg.users.some(u => u.rol === 'owner')) { cfg.users.unshift({user: 'miola', pass: genPass(), rol: 'owner', vid: null, nombre: 'Alejandro Miola (dueño)', activo: true}); cambio = true; }
+    vs.forEach(v => { if (!cfg.users.some(u => u.rol === 'vend' && String(u.vid) === String(v.vid))) { cfg.users.push(nuevoUsuarioVend(v, cfg)); cambio = true; } });
+  }
+  cfg.faltan = vs.filter(v => !cfg.users.some(u => u.rol === 'vend' && String(u.vid) === String(v.vid)));
+  cfg.faltaDueno = !cfg.users.some(u => u.rol === 'owner');
   if (cambio) usersSet(cfg);
   return cfg;
+}
+function nuevoUsuarioVend(v, cfg) {
+  let base = slugUser(v.nombre), user = base, k = 2;
+  while (cfg.users.some(u => u.user === user)) user = base + k++;
+  return {user: user, pass: genPass(), rol: 'vend', vid: v.vid, nombre: v.nombre, activo: true};
+}
+function crearUsuario(vid) {
+  const cfg = cfgUsuarios();
+  const lista = vid === '*' ? cfg.faltan : cfg.faltan.filter(v => String(v.vid) === String(vid));
+  lista.forEach(v => cfg.users.push(nuevoUsuarioVend(v, cfg)));
+  delete cfg.faltan; delete cfg.faltaDueno;
+  usersSet(cfg); renderUsuarios();
+}
+function crearDueno() {
+  const cfg = cfgUsuarios();
+  cfg.users.unshift({user: 'miola', pass: genPass(), rol: 'owner', vid: null, nombre: 'Alejandro Miola (dueño)', activo: true});
+  delete cfg.faltan; delete cfg.faltaDueno;
+  usersSet(cfg); renderUsuarios();
 }
 
 // ── Panel de usuarios (sólo en tu archivo maestro) ───────
@@ -2184,9 +2224,16 @@ function renderUsuarios() {
       '<td><input value="' + esc(u.user) + '" onchange="editUsuario(' + i + ',\'user\',this.value)" autocomplete="off" spellcheck="false"></td>' +
       '<td><div class="pass-cell"><input value="' + esc(u.pass) + '" onchange="editUsuario(' + i + ',\'pass\',this.value)" autocomplete="off" spellcheck="false"><button type="button" class="secondary" title="Generar otra" onclick="editUsuario(' + i + ',\'pass\',genPass(),true)">Nueva</button></div></td>' +
       '<td><input type="checkbox" ' + (u.activo !== false ? 'checked' : '') + ' onchange="editUsuario(' + i + ',\'activo\',this.checked)" style="width:22px;min-height:22px"></td>' +
-      '<td>' + (u.rol === 'vend' && !vendedoresActivos().some(v => String(v.vid) === String(u.vid)) ? '<button type="button" class="text-btn" onclick="borrarUsuario(' + i + ')">Quitar</button>' : '') + '</td></tr>';
+      '<td>' + (ONLINE || (u.rol === 'vend' && !vendedoresActivos().some(v => String(v.vid) === String(u.vid))) ? '<button type="button" class="text-btn" onclick="borrarUsuario(' + i + ')">Quitar</button>' : '') + '</td></tr>';
   });
-  box.innerHTML = h + '</tbody></table></div>';
+  h += '</tbody></table></div>';
+  if (cfg.faltaDueno || (cfg.faltan && cfg.faltan.length)) {
+    h += '<div class="faltan-users"><strong>Sin usuario todavía:</strong> ' +
+      (cfg.faltaDueno ? '<button type="button" class="secondary" onclick="crearDueno()">Crear usuario del dueño</button> ' : '') +
+      (cfg.faltan || []).map(v => '<button type="button" class="secondary" onclick="crearUsuario(\'' + v.vid + '\')">+ ' + esc(v.nombre) + '</button>').join(' ') +
+      ((cfg.faltan || []).length > 1 ? ' <button type="button" onclick="crearUsuario(\'*\')">Crear todos</button>' : '') + '</div>';
+  }
+  box.innerHTML = h;
 }
 function editUsuario(i, k, v, rerender) {
   const cfg = cfgUsuarios();
@@ -2198,7 +2245,12 @@ function editUsuario(i, k, v, rerender) {
   cfg.users[i][k] = v; usersSet(cfg);
   if (rerender) renderUsuarios();
 }
-function borrarUsuario(i) { const cfg = cfgUsuarios(); cfg.users.splice(i, 1); usersSet(cfg); renderUsuarios(); }
+function borrarUsuario(i) {
+  const cfg = cfgUsuarios(), u = cfg.users[i];
+  if (u.rol === 'admin' && cfg.users.filter(x => x.rol === 'admin' && x.activo !== false).length <= 1) { alert('Tiene que quedar al menos un administrador.'); return; }
+  if (!confirm('¿Quitar el usuario «' + u.user + '»?')) return;
+  cfg.users.splice(i, 1); delete cfg.faltan; delete cfg.faltaDueno; usersSet(cfg); renderUsuarios();
+}
 function regenerarTodas() {
   if (!confirm('¿Generar contraseñas nuevas para todos? Las anteriores dejan de funcionar en el próximo tablero que descargues.')) return;
   const cfg = cfgUsuarios(); cfg.users.forEach(u => { u.pass = genPass(); }); usersSet(cfg); renderUsuarios();

@@ -192,10 +192,16 @@ function leerUsuarios_() {
   const h = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJA_CRED);
   if (!h || h.getLastRow() < 2) return [];
   return h.getRange(2, 1, h.getLastRow() - 1, 6).getValues().filter(r => String(r[0]).trim()).map(r => ({
-    user: String(r[0]).trim().toLowerCase(), pass: String(r[1]), rol: String(r[2]).trim().toLowerCase() || 'vend',
+    user: String(r[0]).trim().toLowerCase(), pass: String(r[1]).trim(), rol: normRol_(r[2]),
     vid: String(r[3]).trim() === '' ? null : (isNaN(Number(r[3])) ? String(r[3]).trim() : Number(r[3])),
     nombre: String(r[4]).trim(), activo: String(r[5]).trim().toUpperCase() !== 'NO'
   }));
+}
+function normRol_(r) {
+  const s = String(r || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/^(admin|administrador|administradora)$/.test(s)) return 'admin';
+  if (/^(owner|dueno|duena|propietario)$/.test(s)) return 'owner';
+  return 'vend';
 }
 function guardarUsuarios_(s, req) {
   const users = req.users || [];
