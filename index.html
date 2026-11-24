@@ -662,7 +662,7 @@ body:not(.online) .online-only{display:none!important}
       </div>
       <div class="prov-add">
         <label for="cp-prov">Seguir un proveedor<select id="cp-prov"><option value="">Elegí un proveedor…</option></select></label>
-        <label for="cp-met">Medida<select id="cp-met"><option value="v">Ventas $</option><option value="u">Unidades</option><option value="c">Clientes compradores</option></select></label>
+        <label for="cp-met">Medida<select id="cp-met"><option value="v">Ventas $</option><option value="u">Unidades</option><option value="c">Clientes compradores (más de $20.000)</option></select></label>
         <button type="button" onclick="agregarProv()">Agregar a Control</button>
       </div>
       <div id="ctrl-ocultas" class="ctrl-ocultas" data-dyn></div>
@@ -700,7 +700,7 @@ body:not(.online) .online-only{display:none!important}
     </section>
   </section>
 </main>
-<footer><span class="ver">versión 21/11 15:15</span> · Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
+<footer><span class="ver">versión 24/11 08:15</span> · Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
 
 <div class="tt" id="tt"><div class="tt-l" id="tt-l"></div><div class="tt-v" id="tt-v"></div></div>
 
@@ -758,6 +758,9 @@ function fixTxt(s) {
   return s.replace(/\t/g, ' ').trim();
 }
 const norm = s => fixTxt(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[.\s]+/g, '');
+// Cliente comprador = compra neta mayor a $20.000 en el mes (con los filtros aplicados)
+const MIN_COMPRADOR = 20000;
+const contarCompradores = m => { let n = 0; m.forEach(v => { if (v > MIN_COMPRADOR) n++; }); return n; };
 const sem = p => p >= 100 ? 'good' : p >= 65 ? 'mid' : 'bad';
 const vg = id => { const n = parseInt(id, 10); return isNaN(n) ? id : (VEND_GRUPO[n] || n); };
 function mesIdx(v) {
@@ -1319,10 +1322,11 @@ function renderResumen() {
   const rows = filasFiltradas();
   const md = D.meta.dash || {};
   const diasHab = md.diasHab || 0, diasTrab = md.diasTrab || 0;
-  let V = 0, U = 0, C9 = 0; const clis = new Set();
-  rows.forEach(r => { V += r[4]; U += r[5]; C9 += r[6]; clis.add(r[2]); });
+  let V = 0, U = 0, C9 = 0; const clis = new Map();
+  rows.forEach(r => { V += r[4]; U += r[5]; C9 += r[6]; clis.set(r[2], (clis.get(r[2]) || 0) + r[4]); });
+  let nComp = 0, vComp = 0; clis.forEach(v => { if (v > MIN_COMPRADOR) { nComp++; vComp += v; } });
   const tend = diasTrab ? V / diasTrab * diasHab : 0;
-  const tk = clis.size ? V / clis.size : 0;
+  const tk = nComp ? vComp / nComp : 0;
   const cur = mesActual();
   const prev = avMes(mesAnt(cur.y, cur.m).y, mesAnt(cur.y, cur.m).m, F.vend);
   const yoy = avMes(cur.y - 1, cur.m, F.vend);
@@ -1330,7 +1334,7 @@ function renderResumen() {
   $('kpis-venta').innerHTML =
     k('Ventas del mes', fmtM(V), 'Neto de percepciones · ' + (rows.length ? fmtN(rows.length) + ' líneas' : 'sin ventas')) +
     k('Unidades', fmtN(U), C9 ? fmtN(C9) + ' cajas de 9 L' : '—') +
-    k('Clientes compradores', fmtN(clis.size), 'Ticket promedio ' + fmtM(tk)) +
+    k('Clientes compradores', fmtN(nComp), 'Compra mayor a $20.000 · ' + fmtN(clis.size) + ' con alguna compra · ticket promedio ' + fmtM(tk)) +
     k('Tendencia al cierre', diasTrab ? fmtM(tend) : '—', diasTrab ? 'Ventas ÷ ' + diasTrab + ' días trabajados × ' + diasHab + ' hábiles' : 'Falta Avance') ;
 
   // Bloque de objetivos (Avance) — sólo por vendedor o total
@@ -1563,13 +1567,13 @@ function renderEvo() {
 function renderRankVend(rows) {
   const box = $('rank-vend');
   const by = {};
-  rows.forEach(r => { const o = by[r[1]] || (by[r[1]] = {v: 0, u: 0, c: new Set()}); o.v += r[4]; o.u += r[5]; o.c.add(r[2]); });
+  rows.forEach(r => { const o = by[r[1]] || (by[r[1]] = {v: 0, u: 0, c: new Map()}); o.v += r[4]; o.u += r[5]; o.c.set(r[2], (o.c.get(r[2]) || 0) + r[4]); });
   const tot = Object.values(by).reduce((s, o) => s + o.v, 0) || 1;
   const cur = mesActual(), det = filtroDetalle();
   const md = D.meta.dash || {};
   let items = Object.keys(by).map(id => {
     const a = !det ? avMes(cur.y, cur.m, id) : null;
-    return {id: id, v: by[id].v, u: by[id].u, c: by[id].c.size, obj: a ? a.obj : 0};
+    return {id: id, v: by[id].v, u: by[id].u, c: contarCompradores(by[id].c), obj: a ? a.obj : 0};
   });
   const general = ROL === 'vend' && D.rankAll && !det;
   if (general) { items = D.rankAll.map(x => ({id: String(x.id), name: x.name, v: x.v, u: x.u, c: x.c, obj: x.obj})); }
@@ -2382,8 +2386,8 @@ function datosVendedor(vid, verRanking) {
   if (verRanking) {
     const c = mesActual(), md = D.meta.dash || {};
     const by = {};
-    D.rows.forEach(r => { const o = by[r[1]] || (by[r[1]] = {v: 0, u: 0, c: new Set()}); o.v += r[4]; o.u += r[5]; o.c.add(r[2]); });
-    out.rankAll = vendedoresActivos().map(x => { const a = avMes(c.y, c.m, x.vid); const o = by[x.vid] || {v: 0, u: 0, c: new Set()}; return {id: x.vid, name: x.nombre, v: o.v, u: o.u, c: o.c.size, obj: a ? a.obj : 0}; });
+    D.rows.forEach(r => { const o = by[r[1]] || (by[r[1]] = {v: 0, u: 0, c: new Map()}); o.v += r[4]; o.u += r[5]; o.c.set(r[2], (o.c.get(r[2]) || 0) + r[4]); });
+    out.rankAll = vendedoresActivos().map(x => { const a = avMes(c.y, c.m, x.vid); const o = by[x.vid] || {v: 0, u: 0, c: new Map()}; return {id: x.vid, name: x.nombre, v: o.v, u: o.u, c: contarCompradores(o.c), obj: a ? a.obj : 0}; });
     out.pctPena = D.ini ? D.ini.tg.map(t => ({id: t.id, name: vendName(t.id) || t.name, tg: t.tg, av: t.av})) : null;
   }
   return out;
@@ -2537,7 +2541,7 @@ function ctrlVars() {
     .concat(provDefs().map(d => ({k: d.k, label: d.label, prov: true, money: d.metric === 'v', def: d})));
 }
 // ── Proveedores que se siguen (clave: prov~métrica~proveedor) ──
-const PROV_MET = {v: '$', u: 'unidades', c: 'clientes'};
+const PROV_MET = {v: '$', u: 'unidades', c: 'clientes (> $20.000)'};
 function provDefs() {
   const ks = new Set();
   Object.values((CTRL && CTRL.meses) || {}).forEach(m => { Object.keys(m.t || {}).concat(Object.keys(m.off || {})).forEach(k => { if (k.indexOf('prov~') === 0) ks.add(k); }); });
@@ -2554,10 +2558,10 @@ function provReal(d, vid) {
     if (pi >= 0) D.rows.forEach(r => {
       if (D.prod[r[3]][2] !== pi) return;
       const v = String(r[1]);
-      if (d.metric === 'c') (cs[v] = cs[v] || new Set()).add(r[2]);
+      if (d.metric === 'c') { const mm = (cs[v] = cs[v] || new Map()); mm.set(r[2], (mm.get(r[2]) || 0) + r[4]); }
       else m[v] = (m[v] || 0) + (d.metric === 'u' ? r[5] : r[4]);
     });
-    Object.keys(cs).forEach(v => { m[v] = cs[v].size; });
+    Object.keys(cs).forEach(v => { m[v] = contarCompradores(cs[v]); });
     __provCache.m[d.k] = m;
   }
   return m[String(vid)] || 0;
