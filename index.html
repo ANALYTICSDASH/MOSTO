@@ -700,7 +700,7 @@ body:not(.online) .online-only{display:none!important}
     </section>
   </section>
 </main>
-<footer><span class="ver">versión 24/11 08:15</span> · Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
+<footer><span class="ver">versión 25/11 10:55</span> · Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
 
 <div class="tt" id="tt"><div class="tt-l" id="tt-l"></div><div class="tt-v" id="tt-v"></div></div>
 
@@ -815,7 +815,7 @@ function leerArchivo(file) {
         const want = names.filter(n => Object.values(HOJAS).includes(norm(n)));
         const wb = XLSX.read(data, {type:'array', cellDates:true, dense:true, sheets:want});
         const out = {archivo: file.name, hojas: {}};
-        want.forEach(n => { if (wb.Sheets[n]) out.hojas[norm(n)] = XLSX.utils.sheet_to_json(wb.Sheets[n], {header:1, defval:'', raw:true}); });
+        want.forEach(n => { if (wb.Sheets[n]) { medirHoja(wb.Sheets[n]); out.hojas[norm(n)] = XLSX.utils.sheet_to_json(wb.Sheets[n], {header:1, defval:'', raw:true}); } });
         ok(out);
       } catch (err) { ko(err); }
     };
@@ -823,6 +823,16 @@ function leerArchivo(file) {
   });
 }
 
+// Algunos Excel guardan un tamaño de hoja menor al real (ej. después de insertar columnas):
+// se recalcula con las celdas que de verdad tiene, para no cortar columnas.
+function medirHoja(ws) {
+  const rows = Array.isArray(ws) ? ws : ws['!data'];
+  if (!rows) return;
+  let mr = 0, mc = 0;
+  rows.forEach((r, i) => { if (r && r.length) { mr = i; mc = Math.max(mc, r.length - 1); } });
+  const ref = XLSX.utils.encode_range({s: {r: 0, c: 0}, e: {r: mr, c: mc}});
+  if (ws['!ref'] !== ref) ws['!ref'] = ref;
+}
 async function cargarExcel(input) {
   const files = [...input.files];
   if (!files.length) return;
