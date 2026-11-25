@@ -700,7 +700,7 @@ body:not(.online) .online-only{display:none!important}
     </section>
   </section>
 </main>
-<footer><span class="ver">versión 25/11 10:55</span> · Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
+<footer><span class="ver">versión 25/11 11:20</span> · Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
 
 <div class="tt" id="tt"><div class="tt-l" id="tt-l"></div><div class="tt-v" id="tt-v"></div></div>
 
@@ -859,7 +859,7 @@ async function cargarExcel(input) {
     if (dash && dash.hojas.avance) {
       const nc = Math.max(...dash.hojas.avance.slice(0, 8).map(r => r.length));
       const perdioProg = prev && prev.prog && prev.prog.length && !(D.prog && D.prog.length);
-      if (perdioProg || nc < 140) avisos.push('Avance llegó con ' + nc + ' columnas: ' + (D.ind || []).length + ' variables y ' + (D.prog || []).length + ' programas (combos). Revisá que la copia tenga hasta la columna EZ con sus encabezados');
+      if (perdioProg || !(D.ind && D.ind.length)) avisos.push('Avance llegó con ' + nc + ' columnas: ' + (D.ind || []).length + ' variables y ' + (D.prog || []).length + ' programas (antes había combos). Si cambiaste la estructura de Avance a propósito, tocá «Publicar datos»');
     }
     st.className = 'upload-status ' + (avisos.length ? 'loading' : 'ok');
     st.textContent = (avisos.length ? '⚠ ' + avisos.join(' · ') + ' · ' : '✅ ') + libros.map(l => l.archivo).join(' + ') + (D.ind ? ' · Avance: ' + D.ind.length + ' variables, ' + (D.prog || []).length + ' programa(s)' : '');
@@ -916,10 +916,18 @@ function parseIndicadores(A) {
     if (/^tg/.test(h)) {
       esTG = true;
       if (h.indexOf('total') >= 0) continue;
-      const mi = MESES_LC.findIndex(m => h.indexOf(m.slice(0, 3)) >= 0);
-      if (mi >= 0 && hoy >= 0 && mi !== hoy) continue;
+      const mesDe = x => MESES_LC.findIndex(m => x.indexOf(m.slice(0, 3)) >= 0);
+      const sufijo = x => { let t = x.replace(/^tg/, ''); const m = mesDe(t); if (m >= 0) t = t.replace(MESES_LC[m].slice(0, 3), ''); return t; };
+      const mi = mesDe(h);
+      if (mi >= 0 && hoy >= 0 && mi !== hoy) {
+        // un TG de otro mes se saltea sólo si en el mismo bloque hay uno del mes en curso para lo mismo
+        let hayActual = false;
+        for (let q = grupoCol; q < n && (q === grupoCol || !fixTxt(r4[q])); q++) { const hq = norm(r6[q]); if (/^tg/.test(hq) && mesDe(hq) === hoy && sufijo(hq) === sufijo(h)) hayActual = true; }
+        if (hayActual) continue;
+      }
       real = [j + 1];
-      label = titulo(r4[grupoCol]) + (/ccc/.test(h) ? ' · CCC' : '') + (fixTxt(r6[j + 1]) && !/^avance/.test(norm(r6[j + 1])) ? ' · ' + titulo(r6[j + 1]) : '');
+      const prox = fixTxt(r6[j + 1]), paren = (prox.match(/\(([^)]+)\)/) || [])[1];
+      label = titulo(r4[grupoCol]) + (/ccc/.test(h) ? ' · CCC' : '') + (prox && !/^avance/.test(norm(prox)) ? ' · ' + titulo(prox) : '') + (paren ? ' (' + paren.trim().replace(/\s+/g, ' ') + ')' : '');
     } else if (/^(objetivo|obj)\d*$/.test(h)) {
       for (let k = segIni; k < j; k++) { const hk = norm(r6[k]); if (/^real/.test(hk) || hk === 'on' || hk === 'off') real.push(k); }
       if (!real.length) continue;
@@ -947,14 +955,19 @@ function parseProgramas(A) {
     if (fixTxt(r4[j])) gc = j;
     if (gc < 0) continue;
     const h = norm(r6[j]);
-    const g = grupos[gc] || (grupos[gc] = {col: gc, label: titulo(r4[gc]), meses: [], tt: -1, dif: -1});
+    const g = grupos[gc] || (grupos[gc] = {col: gc, label: titulo(r4[gc]), porSuf: {}, tt: -1, dif: -1});
     if (/^tg/.test(h)) {
       if (h.indexOf('total') >= 0) { g.tt = j; if (norm(r6[j + 1]) === 'dif') g.dif = j + 1; continue; }
       const mi = MESES_LC.findIndex(m => h.indexOf(m.slice(0, 3)) >= 0);
-      if (mi >= 0 && !g.meses.some(x => x.mi === mi)) g.meses.push({mi: mi, tg: j, av: j + 1});
+      if (mi < 0) continue;
+      const suf = h.replace(/^tg/, '').replace(MESES_LC[mi].slice(0, 3), '');
+      const lista = g.porSuf[suf] || (g.porSuf[suf] = []);
+      if (!lista.some(x => x.mi === mi)) lista.push({mi: mi, tg: j, av: j + 1});
     }
   }
-  return Object.values(grupos).filter(g => g.meses.length >= 2).map(g => ({k: norm(g.label).replace(/[^a-z0-9]/g, ''), label: g.label, meses: g.meses, tt: g.tt, dif: g.dif}));
+  // es programa sólo si el mismo concepto (mismo texto después del mes) tiene target en 2 o más meses
+  return Object.values(grupos).map(g => { const best = Object.values(g.porSuf).sort((a, b) => b.length - a.length)[0] || []; return {g: g, meses: best}; })
+    .filter(x => x.meses.length >= 2).map(x => ({k: norm(x.g.label).replace(/[^a-z0-9]/g, ''), label: x.g.label, meses: x.meses, tt: x.g.tt, dif: x.g.dif}));
 }
 function mesActualDe(A) {
   let m = -1, y = 0;
@@ -1779,7 +1792,7 @@ function renderPenaflor() {
 }
 function renderProgramas() {
   if (!D.av) return '';
-  if (!D.prog || !D.prog.length) return '<section class="card visual"><h2>Seguimiento de combos</h2><div class="empty">No encontré en la solapa Avance un bloque con targets por mes (TG OCT / AVANCE OCT / … / TG TOTAL / DIF). Si los datos se publicaron desde una copia del dash sin esas columnas, cargá la copia completa y publicá de nuevo.<br><small>Datos de: ' + esc((D.meta.archivos || []).join(' + ')) + ' · Avance con ' + ((D.meta.dash || {}).avCols || '¿?') + ' columnas (el dash completo tiene 156).</small></div></section>';
+  if (!D.prog || !D.prog.length) return '<section class="card visual"><h2>Seguimiento de combos</h2><div class="empty">No encontré en la solapa Avance un bloque con targets por mes (TG OCT / AVANCE OCT / … / TG TOTAL / DIF). Si los datos se publicaron desde una copia del dash sin esas columnas, cargá la copia completa y publicá de nuevo.<br><small>Datos de: ' + esc((D.meta.archivos || []).join(' + ')) + ' · Avance con ' + ((D.meta.dash || {}).avCols || '¿?') + ' columnas.</small></div></section>';
   const c = mesActual();
   const filas = D.av.filter(r => r[0] === c.y && r[1] === c.m && r[27]);
   let h = '';
