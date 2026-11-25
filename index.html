@@ -3,7 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#2f5e99">
+<meta name="theme-color" content="#a3121f">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mosto">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>Tablero Comercial · Mosto</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin="anonymous"></script>
 <style>
@@ -446,6 +453,10 @@ body:not(.online) .online-only{display:none!important}
 .seg-tbl td:nth-child(4n+2){border-left:2px solid #e1e8f1}
 .seg-tbl tr.tot td{background:#f6f9fd;font-weight:700}
 .seg-tbl tr.is-sel td{background:#e7eef8}
+
+.install-box{margin-top:18px;padding-top:16px;border-top:1px solid var(--line);text-align:center}
+.install-box button{width:100%}
+.install-box p{font-size:.85rem;margin:8px 0 0}
 </style>
 </head>
 <body>
@@ -470,7 +481,7 @@ body:not(.online) .online-only{display:none!important}
       <button type="button" class="secondary" id="btn-desc" onclick="descargarActualizado()">Descargar para vendedores</button>
       <span id="upload-status" class="upload-status"></span>
     </div>
-    <div id="session" class="session" hidden><div><strong id="session-name"></strong><small id="session-role"></small></div><button type="button" class="secondary" onclick="cerrarSesion()">Cerrar sesión</button></div>
+    <div id="session" class="session" hidden><div><strong id="session-name"></strong><small id="session-role"></small></div><button type="button" class="secondary install-top" onclick="instalarApp()" hidden>Instalar app</button><button type="button" class="secondary" onclick="cerrarSesion()">Cerrar sesión</button></div>
   </div>
 </header>
 
@@ -485,6 +496,10 @@ body:not(.online) .online-only{display:none!important}
       <button type="submit" id="login-btn">Ingresar</button>
       <p id="login-msg" class="login-msg" role="alert"></p>
     </form>
+    <div class="install-box" id="install-box" hidden>
+      <button type="button" class="secondary" id="btn-instalar" onclick="instalarApp()" hidden>Instalar la app en este dispositivo</button>
+      <p id="install-ios" hidden>Para instalarla en el iPhone: tocá <b>Compartir</b> <span aria-hidden="true">⎋</span> y después <b>«Agregar a inicio»</b>.</p>
+    </div>
   </section>
   <div id="empty-notice" class="notice admin-only"><strong>Todavía no hay datos cargados.</strong> <span id="empty-notice-txt"></span><span class="offline-only"> Tocá «Cargar Excel» y elegí los dos archivos juntos: la copia liviana del <strong>dash</strong> (solapas Avance, bases y CCC) y <strong>NUEVO_SEGUIMIENTO.xlsx</strong>. Después, con «Descargar actualizado», generás el archivo para compartir con los vendedores.</span></div>
 
@@ -700,7 +715,7 @@ body:not(.online) .online-only{display:none!important}
     </section>
   </section>
 </main>
-<footer><span class="ver">versión 25/11 11:20</span> · Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
+<footer><span class="ver">versión 25/11 15:00</span> · Mosto · Tablero comercial · fuentes: dash (Avance, bases, CCC) y NUEVO_SEGUIMIENTO (INICIAL, VOL X CATEGORA, AUX)</footer>
 
 <div class="tt" id="tt"><div class="tt-l" id="tt-l"></div><div class="tt-v" id="tt-v"></div></div>
 
@@ -2913,6 +2928,29 @@ function pushUsuarios() {
     } catch (e) { setTxt('users-save', '❌ Sin conexión: no se guardó'); }
   }, 500);
 }
+
+// ── Instalar como app (igual que Pilar: manifest + íconos) ──
+let __instPrompt = null;
+const enApp = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault(); __instPrompt = e;
+  if (enApp()) return;
+  const b = $('btn-instalar'); if (b) b.hidden = false;
+  const bx = $('install-box'); if (bx) bx.hidden = false;
+  document.querySelectorAll('.install-top').forEach(x => { x.hidden = false; });
+});
+window.addEventListener('appinstalled', () => { __instPrompt = null; document.querySelectorAll('#btn-instalar,.install-top').forEach(x => { x.hidden = true; }); });
+async function instalarApp() {
+  if (!__instPrompt) return;
+  __instPrompt.prompt();
+  try { await __instPrompt.userChoice; } catch (e) {}
+  __instPrompt = null;
+  document.querySelectorAll('#btn-instalar,.install-top').forEach(x => { x.hidden = true; });
+}
+(function () {
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !enApp();
+  if (ios) { const p = document.getElementById('install-ios'), bx = document.getElementById('install-box'); if (p) p.hidden = false; if (bx) bx.hidden = false; }
+})();
 
 uiInit();
 </script>
